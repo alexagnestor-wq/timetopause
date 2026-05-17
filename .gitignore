@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.Python
+
+# Testing (keep development test files local)
+test_*.py
+automated_test.py
+debug_sound.py
+reset_config.py
+final_verification.py
+
+# Development files
+.update/
+*.log
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+*.swp
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# Temp files
+*.tmp
+*.temp
