@@ -51,7 +51,7 @@ class SettingsManager:
 
     def update_notification_type(self, notification_type: str):
         """Обновить тип уведомления"""
-        if notification_type in ["sound", "flash", "mixed"]:
+        if notification_type in ["sound", "flash", "mixed", "random"]:
             self.config.notification_type = notification_type
             self.save_config()
 

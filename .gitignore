@@ -31,3 +31,13 @@ Thumbs.db
 # Temp files
 *.tmp
 *.temp
+
+# Debug and documentation files (development only)
+*.md
+*.txt
+*.spec
+*.bat
+assets/sounds/*.wav
+
+# Local settings
+.claude/

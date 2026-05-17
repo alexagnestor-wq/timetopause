@@ -40,7 +40,8 @@ class BreakReminderApp:
             self.settings_manager,
             on_start=self._on_timer_start,
             on_stop=self._on_timer_stop,
-            on_minimize=self._on_window_minimize
+            on_minimize=self._on_window_minimize,
+            on_test=self._on_test_notification
         )
         self.settings_window = SettingsWindow(
             self.settings_manager,
@@ -111,11 +112,19 @@ class BreakReminderApp:
     def _on_reminder(self):
         """Обработчик напоминания (вызывается таймером)"""
         config = self.settings_manager.config
-        print(f"\n[REMINDER] REMINDER! ({time.strftime('%H:%M:%S')})")
+        print(f"\n🔔 REMINDER! ({time.strftime('%H:%M:%S')})")
+
+        # Callback для кнопки STOP в notification окне
+        def on_notification_stop():
+            print("⏹️ User stopped from notification")
+            self._on_timer_stop()
+            if self.main_window.window and self.main_window.window.winfo_exists():
+                self.main_window.window.after(0, self._update_ui_after_reminder)
 
         self.notification_manager.notify(
             notification_type=config.notification_type,
-            volume=config.volume
+            volume=config.volume,
+            on_stop=on_notification_stop
         )
 
         self.tray_manager.show_notification(
@@ -123,13 +132,17 @@ class BreakReminderApp:
             "Time to take a break! 💪"
         )
 
-        # Автоматически停止 таймер после уведомления (для теста)
-        print("[AUTO-STOP] Auto-stopping timer after notification (test mode)")
-        self._on_timer_stop()
+        # Auto-stop timer after notification completes (with delay for visual effects)
+        # Flash and sound take ~3 seconds, so wait that long before stopping
+        print("[AUTO-STOP] Auto-stopping timer in 3.5 seconds (after notification effects)")
+        import threading
+        def auto_stop_timer():
+            time.sleep(3.5)
+            self._on_timer_stop()
+            if self.main_window.window and self.main_window.window.winfo_exists():
+                self.main_window.window.after(0, self._update_ui_after_reminder)
 
-        # Schedule UI updates on the main thread (tkinter is not thread-safe)
-        if self.main_window.window and self.main_window.window.winfo_exists():
-            self.main_window.window.after(0, self._update_ui_after_reminder)
+        threading.Thread(target=auto_stop_timer, daemon=True).start()
 
     def _update_ui_after_reminder(self):
         """Update UI on main thread after reminder"""
@@ -149,6 +162,42 @@ class BreakReminderApp:
 
         # Перезапустить таймер с новым интервалом
         self.timer.update_interval(interval)
+
+    def _on_test_notification(self):
+        """Test notification with current settings"""
+        import random
+        import threading
+        print("[TEST] Sending test notification...")
+
+        # Get notification type from UI, not from config file
+        notification_type = self.main_window.notification_var.get()
+        print(f"[TEST] UI selected notification_type: {notification_type}")
+
+        # If random is selected, pick a random type
+        if notification_type == "random":
+            notification_type = random.choice(["sound", "flash", "mixed"])
+            print(f"🎲 Random notification: {notification_type}")
+
+        # Callback to close notification after effects complete
+        def on_test_stop():
+            pass  # Just close, don't stop timer
+
+        self.notification_manager.notify(
+            notification_type=notification_type,
+            volume=self.settings_manager.config.volume,
+            on_stop=on_test_stop
+        )
+
+        # Auto-close notification after 3.5 seconds (allow flash/sound to complete)
+        def auto_close_notification():
+            time.sleep(3.5)
+            if self.notification_manager.notification_window:
+                try:
+                    self.notification_manager.notification_window.destroy()
+                except:
+                    pass
+
+        threading.Thread(target=auto_close_notification, daemon=True).start()
 
     def _on_update_available(self, version: str):
         """Handle update notification from UpdateChecker"""
