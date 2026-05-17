@@ -41,3 +41,14 @@ assets/sounds/*.wav
 
 # Local settings
 .claude/
+
+# Documentation (dev only)
+*.md
+SUMMARY.md
+README.md
+
+# Local settings
+.claude/
+
+# Dev helper scripts
+run.bat
