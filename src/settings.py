@@ -11,6 +11,7 @@ class Config:
     sound_enabled: bool = True
     flash_enabled: bool = True
     volume: int = 100  # 0-100
+    skipped_update_version: str = ""  # version the user chose to skip
 
 class SettingsManager:
     def __init__(self):

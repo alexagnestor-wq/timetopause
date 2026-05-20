@@ -37,7 +37,7 @@ class MainWindow:
         else:
             return f"{int(interval)} min"
 
-    def show(self):
+    def show(self, on_window_created: callable = None):
         """Показать главное окно"""
         if self.window is not None and self.window.winfo_exists():
             self.window.lift()
@@ -45,6 +45,9 @@ class MainWindow:
             return
 
         self.window = tk.Tk()
+
+        if on_window_created:
+            on_window_created(self.window)
         self.window.title("Time to Pause")
         self.window.geometry("700x700")
         self.window.resizable(False, False)

@@ -62,7 +62,7 @@ class BreakReminderApp:
         self.update_checker.check_for_updates()
 
         self.tray_manager.start()
-        self.main_window.show()
+        self.main_window.show(on_window_created=self.notification_manager.set_root_window)
 
         # Главное окно уже блокирует поток
 
@@ -191,11 +191,8 @@ class BreakReminderApp:
         # Auto-close notification after 3.5 seconds (allow flash/sound to complete)
         def auto_close_notification():
             time.sleep(3.5)
-            if self.notification_manager.notification_window:
-                try:
-                    self.notification_manager.notification_window.destroy()
-                except:
-                    pass
+            if self.main_window.window and self.main_window.window.winfo_exists():
+                self.main_window.window.after(0, self.notification_manager.close_notification_window)
 
         threading.Thread(target=auto_close_notification, daemon=True).start()
 
@@ -204,7 +201,11 @@ class BreakReminderApp:
         self.update_version = version
         print(f"[UPDATE] Update available: {version}")
 
-        # Show notification to user
+        # Don't show dialog if user already skipped this version
+        if self.settings_manager.config.skipped_update_version == version:
+            print(f"[UPDATE] Version {version} was previously skipped by user")
+            return
+
         if self.main_window.window and self.main_window.window.winfo_exists():
             self.main_window.window.after(0, self._show_update_dialog)
 
@@ -217,11 +218,17 @@ class BreakReminderApp:
             "Update Available",
             f"A new version ({version}) is available!\n\n"
             f"Current version: {APP_VERSION}\n\n"
-            "Would you like to update now?"
+            "Would you like to update now?\n"
+            "(Click 'No' to skip this version)"
         )
 
         if response:
             self._perform_update()
+        else:
+            # Remember that user skipped this version so dialog doesn't reappear
+            self.settings_manager.config.skipped_update_version = version
+            self.settings_manager.save_config()
+            print(f"[UPDATE] User skipped version {version}")
 
     def _perform_update(self):
         """Download and install update"""

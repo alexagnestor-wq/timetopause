@@ -1,6 +1,6 @@
 """Version management for the app"""
 
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.4.0"
 GITHUB_REPO = "alexagnestor-wq/timetopause"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
