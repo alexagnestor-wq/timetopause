@@ -11,6 +11,8 @@ class Config:
     sound_enabled: bool = True
     flash_enabled: bool = True
     volume: int = 100  # 0-100
+    keep_in_tray: bool = True
+    calendar_alert_minutes: int = 10
     skipped_update_version: str = ""  # version the user chose to skip
 
 class SettingsManager:

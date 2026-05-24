@@ -6,7 +6,7 @@ dist/
 build/
 .Python
 
-# Testing (keep development test files local)
+# Testing
 test_*.py
 automated_test.py
 debug_sound.py
@@ -32,23 +32,14 @@ Thumbs.db
 *.tmp
 *.temp
 
-# Debug and documentation files (development only)
-*.md
-*.txt
-*.spec
-*.bat
+# Google OAuth credentials — contains client_secret, must NOT be public
+assets/credentials.json
+
+# Local Claude Code settings
+.claude/
+
+# Installer output
+installer/
+
+# Sounds (large binaries, distributed via installer/releases)
 assets/sounds/*.wav
-
-# Local settings
-.claude/
-
-# Documentation (dev only)
-*.md
-SUMMARY.md
-README.md
-
-# Local settings
-.claude/
-
-# Dev helper scripts
-run.bat

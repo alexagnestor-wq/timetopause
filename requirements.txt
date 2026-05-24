@@ -2,3 +2,6 @@ pystray==0.19.5
 pillow==11.0.0
 pygame==2.5.2
 win10toast==0.9
+google-api-python-client
+google-auth-httplib2
+google-auth-oauthlib

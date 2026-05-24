@@ -17,6 +17,7 @@ from src.notifications import NotificationManager
 from src.tray_manager import TrayManager
 from src.ui import MainWindow, SettingsWindow
 from src.updater import UpdateChecker
+from src.calendar_manager import CalendarManager
 from src.version import APP_VERSION
 
 
@@ -36,15 +37,26 @@ class BreakReminderApp:
             on_show=self._on_show_window,
             on_exit=self._on_exit
         )
+        self.calendar_manager = CalendarManager(
+            data_dir=self.settings_manager.config_dir,
+            lead_minutes=self.settings_manager.config.calendar_alert_minutes,
+            on_event=self._on_calendar_event,
+            on_status_change=self._on_calendar_status,
+        )
         self.main_window = MainWindow(
             self.settings_manager,
             on_start=self._on_timer_start,
             on_stop=self._on_timer_stop,
             on_minimize=self._on_window_minimize,
-            on_test=self._on_test_notification
+            on_test=self._on_test_notification,
+            on_settings=self._on_settings,
+            on_rainbow_test=self._on_rainbow_test,
+            on_exit=self._on_exit,
+            on_calendar=self._on_calendar_connect,
         )
         self.settings_window = SettingsWindow(
             self.settings_manager,
+            main_window=self.main_window,
             on_apply=self._on_settings_apply
         )
         self.update_checker = UpdateChecker(on_update_available=self._on_update_available)
@@ -61,10 +73,20 @@ class BreakReminderApp:
         print("[UPDATE] Checking for updates...")
         self.update_checker.check_for_updates()
 
+        # Resume calendar polling if already authenticated
+        if self.calendar_manager.is_authenticated():
+            print("[CALENDAR] Resuming calendar sync...")
+            self.calendar_manager.start_polling()
+
         self.tray_manager.start()
-        self.main_window.show(on_window_created=self.notification_manager.set_root_window)
+        self.main_window.show(on_window_created=self._on_main_window_created)
 
         # Главное окно уже блокирует поток
+
+    def _on_main_window_created(self, root):
+        self.notification_manager.set_root_window(root)
+        if self.calendar_manager.is_authenticated():
+            self.main_window.set_calendar_connected(True)
 
     def _on_timer_start(self):
         """Обработчик запуска таймера"""
@@ -146,22 +168,61 @@ class BreakReminderApp:
 
     def _update_ui_after_reminder(self):
         """Update UI on main thread after reminder"""
-        self.main_window.is_running = False
-        self.main_window.start_btn.config(state='normal')
-        self.main_window.stop_btn.config(state='disabled')
-        self.main_window.status_label.config(text="Status: Stopped", fg="#888888")
+        self.main_window.set_stopped_state()
 
     def _on_settings(self):
         """Обработчик открытия окна настроек"""
         print("⚙ Opening settings...")
         self.settings_window.show()
 
-    def _on_settings_apply(self, interval: int, notification_type: str):
+    def _on_settings_apply(self, volume: int, keep_in_tray: bool, calendar_alert_minutes: int = 10):
         """Обработчик применения новых настроек"""
-        print(f"✓ Settings applied: interval={interval} min, type={notification_type}")
+        print(f"✓ Settings applied: volume={volume}, keep_in_tray={keep_in_tray}, cal_alert={calendar_alert_minutes}")
+        self.calendar_manager.update_lead_minutes(calendar_alert_minutes)
 
-        # Перезапустить таймер с новым интервалом
-        self.timer.update_interval(interval)
+    def _on_calendar_connect(self):
+        """User clicked Connect Calendar button."""
+        if not self.calendar_manager.has_credentials():
+            if self.main_window.window:
+                from tkinter import messagebox
+                self.main_window.window.after(0, lambda: messagebox.showinfo(
+                    "Google Calendar Setup",
+                    "To connect Google Calendar:\n\n"
+                    "1. Go to console.cloud.google.com\n"
+                    "2. Create a project & enable Calendar API\n"
+                    "3. Create OAuth2 Desktop credentials\n"
+                    "4. Download credentials.json\n"
+                    f"5. Place it in:\n{self.settings_manager.config_dir}"
+                ))
+            return
+
+        if self.calendar_manager.is_authenticated():
+            # Already connected — disconnect
+            self.calendar_manager.disconnect()
+        else:
+            print("[CALENDAR] Starting auth flow...")
+            self.calendar_manager.authenticate()
+
+    def _on_calendar_status(self, connected: bool):
+        """Called from calendar manager thread when auth status changes."""
+        print(f"[CALENDAR] Status: {'connected' if connected else 'disconnected'}")
+        if self.main_window.window and self.main_window.window.winfo_exists():
+            self.main_window.window.after(
+                0, lambda: self.main_window.set_calendar_connected(connected))
+        if connected:
+            self.calendar_manager.start_polling()
+
+    def _on_calendar_event(self, event_title: str, minutes_until: int):
+        """Called from calendar polling thread when an upcoming event is found."""
+        print(f"[CALENDAR] Event: '{event_title}' in {minutes_until} min")
+        self.notification_manager.play_sound(
+            volume=self.settings_manager.config.volume)
+        self.notification_manager.show_calendar_notification(
+            event_title=event_title,
+            minutes_until=minutes_until,
+            on_ok=lambda: print("[CALENDAR] User acknowledged"),
+            on_skip=lambda: print("[CALENDAR] User skipped"),
+        )
 
     def _on_test_notification(self):
         """Test notification with current settings"""
@@ -195,6 +256,13 @@ class BreakReminderApp:
                 self.main_window.window.after(0, self.notification_manager.close_notification_window)
 
         threading.Thread(target=auto_close_notification, daemon=True).start()
+
+    def _on_rainbow_test(self):
+        """Test alert effect with alert sound."""
+        print("[ALERT TEST] Starting alert test...")
+        self.notification_manager.show_notification_window(lambda: None)
+        self.notification_manager.play_sound('alert.wav', self.settings_manager.config.volume)
+        self.notification_manager.show_alert_flash(duration_seconds=3.0)
 
     def _on_update_available(self, version: str):
         """Handle update notification from UpdateChecker"""

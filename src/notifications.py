@@ -6,6 +6,15 @@ import time
 from pathlib import Path
 from typing import Optional, Callable
 
+_RAINBOW = [
+    '#FF0000', '#FF5500', '#FF9900', '#FFCC00', '#FFFF00',
+    '#AAFF00', '#00FF00', '#00FFAA', '#00FFFF', '#00AAFF',
+    '#0055FF', '#5500FF', '#AA00FF', '#FF00AA', '#FF0055',
+]
+_PIXEL_SIZE = 64
+_FRAME_MS = 50  # 20fps
+
+
 class NotificationManager:
     """Manage sound and visual effects"""
 
@@ -85,6 +94,70 @@ class NotificationManager:
             print(f"System beep error: {e}")
 
     # ------------------------------------------------------------------
+    # Alert text flash
+    # ------------------------------------------------------------------
+
+    def show_alert_flash(self, duration_seconds: float = 3.0):
+        if self._root:
+            self._root.after(0, lambda: self._create_alert_flash(duration_seconds))
+
+    def _create_alert_flash(self, duration_seconds: float):
+        try:
+            flash = tk.Toplevel(self._root)
+            flash.attributes('-fullscreen', True)
+            flash.attributes('-topmost', True)
+            flash.attributes('-alpha', 0.0)
+            flash.overrideredirect(True)
+            flash.configure(bg='white')
+
+            sw = flash.winfo_screenwidth()
+            sh = flash.winfo_screenheight()
+
+            canvas = tk.Canvas(flash, width=sw, height=sh, bg='white', highlightthickness=0)
+            canvas.pack()
+            canvas.create_text(
+                sw // 2, sh // 2,
+                text="FAAAAAAAAA!",
+                font=('Karmatic Arcade', 100),
+                fill='#000000',
+                anchor='center'
+            )
+
+            if self.notification_window and self.notification_window.winfo_exists():
+                self.notification_window.lift()
+
+            total_frames = int(duration_seconds * 20)
+            fade_in  = max(1, int(0.15 * 20))
+            fade_out = max(1, int(1.0  * 20))
+            frame = [0]
+
+            def animate():
+                f = frame[0]
+                if f >= total_frames:
+                    try:
+                        flash.destroy()
+                    except Exception:
+                        pass
+                    return
+                if f < fade_in:
+                    alpha = f / fade_in
+                elif f > total_frames - fade_out:
+                    alpha = (total_frames - f) / fade_out
+                else:
+                    alpha = 1.0
+                try:
+                    flash.attributes('-alpha', max(0.0, min(1.0, alpha)))
+                except Exception:
+                    pass
+                frame[0] += 1
+                flash.after(50, animate)
+
+            animate()
+
+        except Exception as e:
+            print(f"Alert flash error: {e}")
+
+    # ------------------------------------------------------------------
     # Flash — must run on the main thread via Toplevel
     # ------------------------------------------------------------------
 
@@ -101,10 +174,14 @@ class NotificationManager:
         try:
             flash = tk.Toplevel(self._root)
             flash.attributes('-fullscreen', True)
-            flash.attributes('-topmost', False)
+            flash.attributes('-topmost', True)
             flash.configure(bg='white')
             flash.attributes('-alpha', 1.0)
             flash.overrideredirect(True)
+
+            # Keep notification popup above the flash
+            if self.notification_window and self.notification_window.winfo_exists():
+                self.notification_window.lift()
 
             fade_steps = 60
             step_ms = max(1, int(duration_seconds * 1000 / fade_steps))
@@ -160,13 +237,91 @@ class NotificationManager:
             print(f"Flash fallback error: {e}")
 
     # ------------------------------------------------------------------
+    # Rainbow flash — must run on the main thread via Toplevel
+    # ------------------------------------------------------------------
+
+    def show_rainbow_flash(self, duration_seconds: float = 4.0):
+        """Schedule pixel rainbow animation on the main Tk thread."""
+        if self._root:
+            self._root.after(0, lambda: self._create_rainbow_flash(duration_seconds))
+
+    def _create_rainbow_flash(self, duration_seconds: float):
+        """Fullscreen pixel-grid rainbow wave animation."""
+        try:
+            flash = tk.Toplevel(self._root)
+            flash.attributes('-fullscreen', True)
+            flash.attributes('-topmost', True)
+            flash.attributes('-alpha', 0.0)
+            flash.overrideredirect(True)
+            flash.configure(bg='black')
+
+            if self.notification_window and self.notification_window.winfo_exists():
+                self.notification_window.lift()
+
+            sw = flash.winfo_screenwidth()
+            sh = flash.winfo_screenheight()
+
+            canvas = tk.Canvas(flash, width=sw, height=sh, bg='black', highlightthickness=0)
+            canvas.pack()
+
+            PS = _PIXEL_SIZE
+            cols = sw // PS + 1
+            rows = sh // PS + 1
+            nc = len(_RAINBOW)
+
+            rects = []
+            for r in range(rows):
+                for c in range(cols):
+                    rid = canvas.create_rectangle(
+                        c * PS, r * PS, (c + 1) * PS, (r + 1) * PS,
+                        fill=_RAINBOW[0], outline=''
+                    )
+                    rects.append((rid, r, c))
+
+            total_frames = max(1, int(duration_seconds * (1000 / _FRAME_MS)))
+            fade_in  = max(1, int(0.2  * (1000 / _FRAME_MS)))
+            fade_out = max(1, int(1.0  * (1000 / _FRAME_MS)))
+            frame = [0]
+
+            def animate():
+                f = frame[0]
+                if f >= total_frames:
+                    try:
+                        flash.destroy()
+                    except Exception:
+                        pass
+                    return
+
+                if f < fade_in:
+                    alpha = f / fade_in
+                elif f > total_frames - fade_out:
+                    alpha = (total_frames - f) / fade_out
+                else:
+                    alpha = 1.0
+                try:
+                    flash.attributes('-alpha', max(0.0, min(1.0, alpha)))
+                except Exception:
+                    pass
+
+                for rid, r, c in rects:
+                    canvas.itemconfig(rid, fill=_RAINBOW[(c + r + f) % nc])
+
+                frame[0] += 1
+                flash.after(_FRAME_MS, animate)
+
+            animate()
+
+        except Exception as e:
+            print(f"Rainbow flash error: {e}")
+
+    # ------------------------------------------------------------------
     # Notification window — must run on the main thread via Toplevel
     # ------------------------------------------------------------------
 
     def show_notification_window(self, on_stop: Callable):
         """Schedule notification window creation on the main Tk thread."""
         if self._root:
-            self._root.after(0, lambda: self._create_notification_window(on_stop))
+            self._root.after(500, lambda: self._create_notification_window(on_stop))
         else:
             threading.Thread(
                 target=self._notification_window_thread,
@@ -178,52 +333,63 @@ class NotificationManager:
         """Create notification window as Toplevel on the main thread."""
         try:
             if self.notification_window and self.notification_window.winfo_exists():
-                return
+                try:
+                    self.notification_window.destroy()
+                except Exception:
+                    pass
+                self.notification_window = None
 
             self.notification_window = tk.Toplevel(self._root)
             self.notification_window.title("Time to Pause")
-            self.notification_window.geometry("500x300")
+            self.notification_window.geometry("500x320")
             self.notification_window.resizable(False, False)
             self.notification_window.attributes('-topmost', True)
 
-            main_frame = tk.Frame(self.notification_window, bg='#FFF176', padx=40, pady=40)
+            # Center window on screen
+            self.notification_window.update_idletasks()
+            x = (self.notification_window.winfo_screenwidth() // 2) - (500 // 2)
+            y = (self.notification_window.winfo_screenheight() // 2) - (320 // 2)
+            self.notification_window.geometry(f"500x320+{x}+{y}")
+
+            main_frame = tk.Frame(self.notification_window, bg='#ffffff', padx=40, pady=30)
             main_frame.pack(fill=tk.BOTH, expand=True)
 
             tk.Label(
                 main_frame,
-                text="Time to make a pause!",
-                font=('Arial', 28, 'bold'),
-                bg='#FFF176',
-                fg='#333333'
-            ).pack(pady=(0, 20))
+                text="TIME TO\nMAKE A PAUSE!",
+                font=('Karmatic Arcade', 28),
+                bg='#ffffff',
+                fg='#000000',
+                justify='center'
+            ).pack(pady=(0, 15))
 
             tk.Label(
                 main_frame,
                 text="Take a break and rest your eyes",
-                font=('Arial', 14),
-                bg='#FFF176',
-                fg='#666666'
-            ).pack(pady=(0, 30))
+                font=('Arial', 12),
+                bg='#ffffff',
+                fg='#333333'
+            ).pack(pady=(0, 20))
 
             tk.Button(
                 main_frame,
                 text="STOP (I'm taking a break!)",
                 command=lambda: self._on_notification_stop(on_stop),
-                bg='#FF5252', fg='white',
-                font=('Arial', 16, 'bold'),
-                padx=30, pady=20,
-                cursor='hand2', relief=tk.RAISED, bd=3
-            ).pack(pady=10, fill=tk.X)
+                bg='#000000', fg='#ffffff',
+                font=('Arial', 11, 'bold'),
+                padx=20, pady=12,
+                cursor='hand2', relief='solid', bd=2
+            ).pack(fill=tk.X, pady=(0, 8))
 
             tk.Button(
                 main_frame,
                 text="Continue (I'll take a break later)",
                 command=lambda: self._on_notification_stop(on_stop),
-                bg='#4CAF50', fg='white',
-                font=('Arial', 12),
-                padx=20, pady=10,
-                cursor='hand2'
-            ).pack(pady=5, fill=tk.X)
+                bg='#ffffff', fg='#000000',
+                font=('Arial', 11, 'bold'),
+                padx=20, pady=12,
+                cursor='hand2', relief='solid', bd=2
+            ).pack(fill=tk.X)
 
         except Exception as e:
             print(f"Notification window error: {e}")
@@ -233,46 +399,53 @@ class NotificationManager:
         try:
             self.notification_window = tk.Tk()
             self.notification_window.title("Time to Pause")
-            self.notification_window.geometry("500x300")
+            self.notification_window.geometry("500x320")
             self.notification_window.resizable(False, False)
             self.notification_window.attributes('-topmost', True)
 
-            main_frame = tk.Frame(self.notification_window, bg='#FFF176', padx=40, pady=40)
+            # Center window on screen
+            self.notification_window.update_idletasks()
+            x = (self.notification_window.winfo_screenwidth() // 2) - (500 // 2)
+            y = (self.notification_window.winfo_screenheight() // 2) - (320 // 2)
+            self.notification_window.geometry(f"500x320+{x}+{y}")
+
+            main_frame = tk.Frame(self.notification_window, bg='#ffffff', padx=40, pady=30)
             main_frame.pack(fill=tk.BOTH, expand=True)
 
             tk.Label(
                 main_frame,
-                text="Time to make a pause!",
-                font=('Arial', 28, 'bold'),
-                bg='#FFF176', fg='#333333'
-            ).pack(pady=(0, 20))
+                text="TIME TO\nMAKE A PAUSE!",
+                font=('Karmatic Arcade', 28),
+                bg='#ffffff', fg='#000000',
+                justify='center'
+            ).pack(pady=(0, 15))
 
             tk.Label(
                 main_frame,
                 text="Take a break and rest your eyes",
-                font=('Arial', 14),
-                bg='#FFF176', fg='#666666'
-            ).pack(pady=(0, 30))
+                font=('Arial', 12),
+                bg='#ffffff', fg='#333333'
+            ).pack(pady=(0, 20))
 
             tk.Button(
                 main_frame,
                 text="STOP (I'm taking a break!)",
                 command=lambda: self._on_notification_stop(on_stop),
-                bg='#FF5252', fg='white',
-                font=('Arial', 16, 'bold'),
-                padx=30, pady=20,
-                cursor='hand2', relief=tk.RAISED, bd=3
-            ).pack(pady=10, fill=tk.X)
+                bg='#000000', fg='#ffffff',
+                font=('Arial', 11, 'bold'),
+                padx=20, pady=12,
+                cursor='hand2', relief='solid', bd=2
+            ).pack(fill=tk.X, pady=(0, 8))
 
             tk.Button(
                 main_frame,
                 text="Continue (I'll take a break later)",
                 command=lambda: self._on_notification_stop(on_stop),
-                bg='#4CAF50', fg='white',
-                font=('Arial', 12),
-                padx=20, pady=10,
-                cursor='hand2'
-            ).pack(pady=5, fill=tk.X)
+                bg='#ffffff', fg='#000000',
+                font=('Arial', 11, 'bold'),
+                padx=20, pady=12,
+                cursor='hand2', relief='solid', bd=2
+            ).pack(fill=tk.X)
 
             while self.notification_window and self.notification_window.winfo_exists():
                 try:
@@ -319,6 +492,106 @@ class NotificationManager:
             self.notification_window = None
 
     # ------------------------------------------------------------------
+    # Calendar notification window
+    # ------------------------------------------------------------------
+
+    def show_calendar_notification(self, event_title: str, minutes_until: int,
+                                   on_ok: Callable, on_skip: Callable):
+        """Show calendar event alert on the main Tk thread."""
+        if self._root:
+            self._root.after(0, lambda: self._create_calendar_notification(
+                event_title, minutes_until, on_ok, on_skip))
+
+    def _create_calendar_notification(self, event_title: str, minutes_until: int,
+                                      on_ok: Callable, on_skip: Callable):
+        try:
+            if self.notification_window and self.notification_window.winfo_exists():
+                try:
+                    self.notification_window.destroy()
+                except Exception:
+                    pass
+                self.notification_window = None
+
+            win = tk.Toplevel(self._root)
+            self.notification_window = win
+            win.title("Upcoming Call")
+            win.geometry("500x340")
+            win.resizable(False, False)
+            win.attributes('-topmost', True)
+
+            win.update_idletasks()
+            x = (win.winfo_screenwidth()  // 2) - 250
+            y = (win.winfo_screenheight() // 2) - 170
+            win.geometry(f"500x340+{x}+{y}")
+
+            main_frame = tk.Frame(win, bg='#ffffff', padx=40, pady=30)
+            main_frame.pack(fill=tk.BOTH, expand=True)
+
+            tk.Label(
+                main_frame,
+                text="UPCOMING CALL!",
+                font=('Karmatic Arcade', 24),
+                bg='#ffffff', fg='#000000',
+                justify='center'
+            ).pack(pady=(0, 10))
+
+            tk.Label(
+                main_frame,
+                text=event_title,
+                font=('Arial', 13, 'bold'),
+                bg='#ffffff', fg='#000000',
+                wraplength=400, justify='center'
+            ).pack(pady=(0, 4))
+
+            tk.Label(
+                main_frame,
+                text=f"starts in {minutes_until} minute{'s' if minutes_until != 1 else ''}",
+                font=('Arial', 11),
+                bg='#ffffff', fg='#555555'
+            ).pack(pady=(0, 20))
+
+            def _ok():
+                try:
+                    win.destroy()
+                except Exception:
+                    pass
+                self.notification_window = None
+                if on_ok:
+                    on_ok()
+
+            def _skip():
+                try:
+                    win.destroy()
+                except Exception:
+                    pass
+                self.notification_window = None
+                if on_skip:
+                    on_skip()
+
+            tk.Button(
+                main_frame,
+                text="OK, THANKS!",
+                command=_ok,
+                bg='#000000', fg='#ffffff',
+                font=('Arial', 11, 'bold'),
+                padx=20, pady=12,
+                cursor='hand2', relief='solid', bd=2
+            ).pack(fill=tk.X, pady=(0, 8))
+
+            tk.Button(
+                main_frame,
+                text="I'LL SKIP THIS ONE",
+                command=_skip,
+                bg='#ffffff', fg='#000000',
+                font=('Arial', 11, 'bold'),
+                padx=20, pady=12,
+                cursor='hand2', relief='solid', bd=2
+            ).pack(fill=tk.X)
+
+        except Exception as e:
+            print(f"Calendar notification error: {e}")
+
+    # ------------------------------------------------------------------
     # Combined notify
     # ------------------------------------------------------------------
 
@@ -333,8 +606,23 @@ class NotificationManager:
 
         self.show_notification_window(on_stop)
 
-        if notification_type in ("sound", "mixed"):
-            self.play_sound(sound_filename, volume, max_duration=999)
+        # Pre-select sound so we can decide which visual effect to show
+        selected_sound = sound_filename
+        if notification_type in ("sound", "mixed") and selected_sound is None:
+            wav_files = list(self.sounds_dir.glob('*.wav'))
+            if wav_files:
+                selected_sound = random.choice(wav_files).name
+                print(f"Pre-selected sound: {selected_sound}")
 
-        if notification_type in ("flash", "mixed"):
+        if notification_type in ("sound", "mixed"):
+            self.play_sound(selected_sound, volume, max_duration=999)
+
+        is_rainbow = selected_sound and 'taste-the-rainbow' in selected_sound.lower()
+        is_alert   = selected_sound and 'alert' in selected_sound.lower()
+
+        if is_rainbow:
+            self.show_rainbow_flash(duration_seconds=3.0)
+        elif is_alert:
+            self.show_alert_flash(duration_seconds=3.0)
+        elif notification_type in ("flash", "mixed"):
             self.show_flash(duration_seconds=3.0)

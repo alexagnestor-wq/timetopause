@@ -27,7 +27,7 @@ class TrayManager:
 
         # Загрузить иконку из assets
         if icon_path is None:
-            icon_path = Path(__file__).parent.parent / "assets" / "icon.ico"
+            icon_path = Path(__file__).parent.parent / "assets" / "app_icon2.ico"
 
         if icon_path and icon_path.exists():
             try:

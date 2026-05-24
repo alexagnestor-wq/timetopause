@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\suprunov-a\\\\Documents\\\\MaProjects\\\\Claude\\\\TimeToPauseApp\" -Filter \"*.log\" -Recurse)",
-      "Bash(Select-Object FullName, LastWriteTime)",
-      "Bash(git add *)"
-    ]
-  }
-}
