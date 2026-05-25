@@ -6,10 +6,28 @@ Break Reminder - Windows Desktop App
 
 import sys
 import time
+import ctypes
 from pathlib import Path
 
 # Добавим текущую папку в path для импортов
 sys.path.insert(0, str(Path(__file__).parent))
+
+
+def _load_bundled_fonts():
+    """Load custom fonts from assets/fonts/ at runtime (no system install needed)."""
+    try:
+        fonts_dir = Path(__file__).parent / 'assets' / 'fonts'
+        if not fonts_dir.exists():
+            return
+        FR_PRIVATE = 0x10
+        for font_file in fonts_dir.glob('*.ttf'):
+            ctypes.windll.gdi32.AddFontResourceExW(str(font_file), FR_PRIVATE, 0)
+            print(f"[FONT] Loaded: {font_file.name}")
+    except Exception as e:
+        print(f"[FONT] Could not load fonts: {e}")
+
+
+_load_bundled_fonts()
 
 from src.settings import SettingsManager
 from src.timer import ReminderTimer
